@@ -1,5 +1,7 @@
 from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
 from openai import OpenAI
 from dotenv import load_dotenv
 from typing import Optional
@@ -32,11 +34,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ===================== STATIC FILES =====================
+# Thư mục static phải tồn tại và chứa index.html
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 # ===================== CLASSIFICATION FUNCTIONS =====================
 def classify_text(text: str) -> str:
-    """
-    Classify text as Informative / Not Informative
-    """
     prompt = f"""
 You are a strict NLP classifier.
 
@@ -65,9 +68,6 @@ Sentence:
 
 
 def classify_image(image_bytes: bytes) -> str:
-    """
-    Classify image as Informative / Not Informative
-    """
     image_base64 = base64.b64encode(image_bytes).decode("utf-8")
 
     prompt = """
@@ -107,21 +107,20 @@ Return ONLY one label.
 def late_fusion(text_label: Optional[str], image_label: Optional[str]) -> str:
     """
     Late fusion (OR rule):
-    If either modality is Informative → Informative
+    Nếu text hoặc image là Informative → Informative
     """
     if text_label == "Informative" or image_label == "Informative":
         return "Informative"
     return "Not Informative"
 
 
-# ===================== API ENDPOINTS =====================
+# ===================== ROUTES =====================
 @app.get("/")
-def health_check():
-    return {
-        "status": "online",
-        "service": "Disaster Recognition API",
-        "version": "1.0.0"
-    }
+def serve_index():
+    """
+    Serve giao diện HTML
+    """
+    return FileResponse("static/index.html")
 
 
 @app.post("/api/classify")
@@ -137,8 +136,6 @@ async def classify_disaster(
     - text
     - image
     - both
-
-    Returns late-fusion result.
     """
 
     text_label = None
@@ -154,21 +151,26 @@ async def classify_disaster(
 
         final_label = late_fusion(text_label, image_label)
 
-        return {
-            "success": True,
-            "mode": mode,
-            "results": {
-                "text_label": text_label,
-                "image_label": image_label,
-                "final_label": final_label
+        return JSONResponse(
+            content={
+                "success": True,
+                "mode": mode,
+                "results": {
+                    "text_label": text_label,
+                    "image_label": image_label,
+                    "final_label": final_label
+                }
             }
-        }
+        )
 
     except Exception as e:
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "error": str(e)
+            }
+        )
 
 
 # ===================== ENTRY POINT (RENDER SAFE) =====================
@@ -178,7 +180,7 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
 
     uvicorn.run(
-        "main:app",     # ⚠️ đổi "main" nếu tên file khác
+        "main:app",   # đổi "main" nếu file tên khác
         host="0.0.0.0",
         port=port,
         reload=False

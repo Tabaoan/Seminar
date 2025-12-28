@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Disaster Recognition AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fadeIn { animation: fadeIn .4s ease-out; }
+    .spin { animation: spin 1s linear infinite; }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+
+<body class="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white p-6">
+  <div class="max-w-6xl mx-auto">
+
+    <!-- Header -->
+    <header class="text-center mb-12 pt-8">
+      <div class="inline-flex items-center gap-3 mb-4">
+        <div class="p-3 bg-gradient-to-br from-red-500 to-orange-500 rounded-2xl">
+          <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        </div>
+        <h1 class="text-5xl font-bold bg-gradient-to-r from-red-400 to-orange-400 bg-clip-text text-transparent">
+          Disaster Recognition AI
+        </h1>
+      </div>
+      <p class="text-slate-300 text-lg">Multimodal Analysis System</p>
+    </header>
+
+    <!-- Mode -->
+    <div class="flex justify-center gap-4 mb-8">
+      <button onclick="setMode('text')" id="btn-text" class="mode-btn">Text Only</button>
+      <button onclick="setMode('image')" id="btn-image" class="mode-btn">Image Only</button>
+      <button onclick="setMode('both')" id="btn-both" class="mode-btn active">Both</button>
+    </div>
+
+    <!-- Inputs -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      <!-- Text -->
+      <div id="text-box" class="input-card">
+        <h3 class="input-title">Text Input</h3>
+        <textarea id="text-input" placeholder="Describe a disaster situation..."
+          class="textarea"></textarea>
+      </div>
+
+      <!-- Image -->
+      <div id="image-box" class="input-card">
+        <h3 class="input-title">Image Input</h3>
+        <label id="upload-area" class="upload-area">
+          Upload Image
+          <input type="file" accept="image/*" hidden onchange="loadImage(event)">
+        </label>
+        <div id="preview" class="hidden relative mt-3">
+          <img id="preview-img" class="rounded-xl w-full h-40 object-cover"/>
+          <button onclick="removeImage()" class="remove-btn">✕</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="flex justify-center gap-4 mb-10">
+      <button id="analyze-btn" onclick="analyze()" class="analyze-btn">Analyze</button>
+      <button onclick="resetAll()" class="reset-btn">Reset</button>
+    </div>
+
+    <!-- Results -->
+    <section id="results" class="hidden animate-fadeIn bg-slate-800/70 rounded-2xl p-8">
+      <h2 class="text-2xl font-bold mb-6">Results</h2>
+
+      <div id="text-result" class="result-row hidden">
+        <span>Text:</span><span id="text-label"></span>
+      </div>
+
+      <div id="image-result" class="result-row hidden">
+        <span>Image:</span><span id="image-label"></span>
+      </div>
+
+      <div class="result-row mt-4 border-t border-slate-600 pt-4">
+        <span>Final:</span><span id="final-label"></span>
+      </div>
+    </section>
+
+  </div>
+
+<script>
+let mode = 'both';
+let imageFile = null;
+
+function setMode(m) {
+  mode = m;
+  ['text','image','both'].forEach(x=>{
+    document.getElementById('btn-'+x).classList.remove('active');
+  });
+  document.getElementById('btn-'+m).classList.add('active');
+
+  document.getElementById('text-box').style.display = m==='image'?'none':'block';
+  document.getElementById('image-box').style.display = m==='text'?'none':'block';
+}
+
+function loadImage(e){
+  imageFile = e.target.files[0];
+  const reader = new FileReader();
+  reader.onload = r=>{
+    document.getElementById('preview-img').src = r.target.result;
+    document.getElementById('upload-area').classList.add('hidden');
+    document.getElementById('preview').classList.remove('hidden');
+  };
+  reader.readAsDataURL(imageFile);
+}
+
+function removeImage(){
+  imageFile=null;
+  document.getElementById('upload-area').classList.remove('hidden');
+  document.getElementById('preview').classList.add('hidden');
+}
+
+async function analyze(){
+  resetResults();
+
+  const text = document.getElementById('text-input').value;
+  if(mode!=='image' && !text) return alert('Enter text');
+  if(mode!=='text' && !imageFile) return alert('Upload image');
+
+  const btn=document.getElementById('analyze-btn');
+  btn.innerHTML='Analyzing...';
+  btn.disabled=true;
+
+  const fd=new FormData();
+  fd.append('mode',mode);
+  if(text) fd.append('text',text);
+  if(imageFile) fd.append('image',imageFile);
+
+  try{
+    const res=await fetch('/api/classify',{method:'POST',body:fd,cache:'no-store'});
+    const data=await res.json();
+    if(!data.success) throw new Error(data.error);
+
+    if(data.results.text_label){
+      show('text-result','text-label',data.results.text_label);
+    }
+    if(data.results.image_label){
+      show('image-result','image-label',data.results.image_label);
+    }
+    show('results','final-label',data.results.final_label);
+
+  }catch(e){
+    alert(e.message);
+  }finally{
+    btn.innerHTML='Analyze';
+    btn.disabled=false;
+  }
+}
+
+function show(row,id,label){
+  document.getElementById(row).classList.remove('hidden');
+  document.getElementById(id).innerHTML=badge(label);
+}
+
+function badge(label){
+  const ok=label==='Informative';
+  return `<span class="px-4 py-1 rounded-full ${ok?'bg-red-500/20 text-red-400':'bg-green-500/20 text-green-400'}">${label}</span>`;
+}
+
+function resetResults(){
+  document.getElementById('results').classList.add('hidden');
+  ['text-result','image-result'].forEach(id=>document.getElementById(id).classList.add('hidden'));
+}
+
+function resetAll(){
+  document.getElementById('text-input').value='';
+  removeImage();
+  resetResults();
+}
+</script>
+
+<style>
+.mode-btn{padding:.75rem 1.5rem;border-radius:1rem;background:#1f2937}
+.mode-btn.active{background:linear-gradient(to right,#9333ea,#ec4899)}
+.input-card{background:#1f2937cc;border-radius:1rem;padding:1.5rem}
+.input-title{font-weight:700;margin-bottom:.5rem}
+.textarea{width:100%;height:10rem;background:#020617aa;padding:1rem;border-radius:.75rem}
+.upload-area{height:10rem;border:2px dashed #64748b;border-radius:.75rem;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.analyze-btn{background:linear-gradient(to right,#dc2626,#f97316);padding:1rem 2rem;border-radius:1rem;font-weight:700}
+.reset-btn{background:#475569;padding:1rem 2rem;border-radius:1rem}
+.result-row{display:flex;justify-content:space-between;margin-top:.75rem}
+.remove-btn{position:absolute;top:.5rem;right:.5rem;background:red;color:white;border-radius:.5rem;padding:.25rem}
+</style>
+</body>
+</html>
