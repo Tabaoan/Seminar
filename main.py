@@ -109,7 +109,7 @@ def late_fusion(text_label: Optional[str], image_label: Optional[str]) -> str:
     Late fusion (OR rule):
     Nếu text hoặc image là Informative → Informative
     """
-    if text_label == "Informative" or image_label == "Informative":
+    if text_label == "Informative" and image_label == "Informative":
         return "Informative"
     return "Not Informative"
 
@@ -180,7 +180,7 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
 
     uvicorn.run(
-        "main:app",   # đổi "main" nếu file tên khác
+        "main:app",   
         host="0.0.0.0",
         port=port,
         reload=False
